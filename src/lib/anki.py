@@ -1,15 +1,19 @@
+import re
+import sys
 import json
 import requests
 import urllib
 import pandas as pd
 import numpy as np
+from .util import send_request
 
 def collapse_fields(row):
     row['fields'] = {
-    'Front': row['question'],
-    'Back': row['answer']
+        'Front': row['question'],
+        'Back': row['answer']
     }
     row['tags'] = [row['tag']]
+    row = row[['fields','tags']]
     return row
 
 def expand_fields(row):
@@ -19,25 +23,22 @@ def expand_fields(row):
 def get_params_from_dataframe(notes_frame):
     notes_frame['fields'] = None
     notes_frame['tags'] = None
-    notes_frame.apply(func=collapse_fields,axis=1)
-    notes_frame.drop(labels=['question','answer', 'tag'],axis=1,inplace=True)
+    if 'answer_y' in notes_frame.columns:
+        notes_frame['answer'] = notes_frame['answer_y']
+    result = []
+    for ind, row in notes_frame.iterrows():
+        row = collapse_fields(row)
+        result.append(row)
+    notes_frame = pd.DataFrame(result)
+
     notes_frame['deckName'] = 'Study'
-    notes_frame['modelName'] = 'Basic'
-    params =  { 'notes': notes_frame.to_dict(orient='records') }
+    notes_frame['modelName'] = 'Basic (type in the answer)'
 
-    return params
+    listable_notes = [row.to_dict() for index,row in notes_frame.iterrows()]
+    notes = json.dumps(listable_notes)
+    params =  { 'notes': notes }
 
-def send_request(action, params):
-    data = {
-    'action': action,
-    'version': 6,
-    "params": params
-    }
-
-    requestJson = json.dumps(data).encode('utf-8')
-    response = json.load(urllib.request.urlopen(urllib.request.Request('http://localhost:8765', requestJson)))
-
-    return response['result']
+    return listable_notes
 
 def get_current_anki_cards_as_dataframe():
     params = {
@@ -52,12 +53,22 @@ def get_current_anki_cards_as_dataframe():
 
     response = send_request('cardsInfo',params)
 
-    return pd.read_json(json.dumps(response),orient='records')
+    res = json.dumps(response)
+    df = pd.read_json(res,orient='records')
+    return df
 
 def remove_old_cards(old_frame, new_frame):
+    # for ind,row in new_frame.iterrows():
+    #     if re.match('.*Name.*',row['question']):
+    #         print(row['question'])
+    global expected_failures
+    expected_failures = 0
+    if len(old_frame) == 0:
+        return
+    old_frame['question'] = old_frame['question'].apply(lambda x: re.sub('\n\n.*','',x))
     to_remove = old_frame.merge(right=new_frame,how='outer',on='question',indicator=True)
     to_remove.replace(to_replace='right_only',value=np.nan,inplace=True)
-    global expected_failures
+    
     expected_failures = to_remove.groupby('_merge').count()['question']['both']
     to_remove.replace(to_replace='both',value=np.nan,inplace=True)
     to_remove.dropna(subset=['_merge'],inplace=True)
@@ -66,39 +77,62 @@ def remove_old_cards(old_frame, new_frame):
         params = {
             'cards': to_remove['cardId'].astype(dtype=np.dtype(np.int64)).to_numpy().tolist()
         }
-        note_ids = send_request('cardsToNotes',params)
+        for ind,thing in to_remove.iterrows():
+            print(thing['question'] + ' ')
+        print('-----------------------')
+        print(params)
+        print('-----------------------')
+        note_ids = send_request('areSuspended',params)
+        print('-----------------------')
+        print(note_ids)
+        print('-----------------------')
+        note_ids = send_request('suspend',params)
+        print('-----------------------')
+        print(note_ids)
+        print('-----------------------')
+        note_ids = send_request('areSuspended',params)
+        print('-----------------------')
+        print(note_ids)
+        print('-----------------------')
 
+        # params = {
+        #     'notes': note_ids
+        # }
+
+        # result = send_request('deleteNotes',params)
+
+    to_unsuspend = old_frame.merge(right=new_frame,how='outer',on='question',indicator=True)
+    to_unsuspend.replace(to_replace='left_only',value=np.nan,inplace=True)
+    to_unsuspend.replace(to_replace='right_only',value=np.nan,inplace=True)
+    to_unsuspend.dropna(subset=['_merge'],inplace=True)
+
+    if len(to_unsuspend) > 0:
         params = {
-            'notes': note_ids
+            'cards': to_remove['cardId'].astype(dtype=np.dtype(np.int64)).to_numpy().tolist()
         }
+        note_ids = send_request('unsuspend',params)
 
-        if len(note_ids) > 0:
-            print('Deleting ' + str(len(note_ids)) + ' cards')
-
-        result = send_request('deleteNotes',params)
+    to_add = old_frame.merge(right=new_frame,how='outer',on='question',indicator=True)
+    to_add.replace(to_replace='left_only',value=np.nan,inplace=True)
+    to_add.replace(to_replace='both',value=np.nan,inplace=True)
+    to_add.dropna(subset=['_merge'],inplace=True)
+    return to_add
 
 def add_notes_to_anki(notes_frame):
     old_frame = get_current_anki_cards_as_dataframe()
 
-    remove_old_cards(old_frame, notes_frame)
+    notes_frame = remove_old_cards(old_frame, notes_frame)
 
-    params = get_params_from_dataframe(notes_frame)
+    if len(notes_frame) > 0:
+        listable_notes = get_params_from_dataframe(notes_frame)
 
-    response = send_request('addNotes',params)
-
-    ind = 0
-    failures = 0
-
-    for item in response:
-        row = notes_frame.loc[ind]
-        if item == None:
-            can_find = False
-            for thing in old_frame['fields']:
-                if thing['Front']['value'] == row['fields']['Front']:
-                    can_find = True
-            if not can_find:
-                print(row['tags'])
-            failures += 1
-        ind += 1
-    if errors > expected_failures:
-        print(str(errors-expected_failures) + ' errors')
+        responses = []
+        for note in listable_notes:
+            params = {
+                'note': note
+            }
+            print(note)
+            print()
+            response = send_request('addNote',params)
+            responses.append(response)
+        print(responses)
