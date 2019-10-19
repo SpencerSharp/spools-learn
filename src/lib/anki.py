@@ -72,7 +72,7 @@ def remove_old_cards(old_frame, new_frame):
             'cards': to_remove['cardId'].astype(dtype=np.dtype(np.int64)).to_numpy().tolist()
         }
         for ind,thing in to_remove.iterrows():
-            print(thing)
+            print(thing['fields'])
         # print('-----------------------')
         # print(params)
         # print('-----------------------')

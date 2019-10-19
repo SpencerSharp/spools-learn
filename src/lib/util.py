@@ -29,7 +29,9 @@ def send_request(action, params):
     return result
 
 def sub_latex(line):
-    latex = re.search(r'(.*?)\\\[ (.+?) \\\](.*?)', line)
+    if line == None:
+        return None
+    latex = re.search(r"(.*?)\\\[ (.+?) \\\](.*?)", line)
     if latex != None:
         line = re.sub('<','',line)
         line = re.sub('>','',line)

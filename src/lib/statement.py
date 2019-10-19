@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 def set_notes(new_notes):
     global notes
     notes = new_notes
-
+# <img><img src="rotated-stem3.png">
 def op_on_row(tags_to_dates, row):
     tag = row['tag']
     if tag in tags_to_dates.keys():
