@@ -33,31 +33,24 @@ def parse_info_file(file):
     line = util.getline(file)
     while line != None:
         if re.match('Due.*', line):
-            add_due_date(line, util.get_tag(file.name))
+            add_due_date(line, util.get_tag(file))
         elif re.match('_.*?_', line):
-            set_header(file.name, line[1:-1])
+            util.set_header(file, line[1:-1])
         elif len(line) == 0:
-            set_header(file.name, None)
+            util.set_header(file, None)
         else:
             statements.add_statement(file, line)
         line = util.getline(file)
+    util.set_header(file, None)
 
 def parse_dir(directory):
     subdirs = [x for x in directory.iterdir() if x.is_dir()]
 
-    ray = [x for x in directory.glob('*.info')]
-    if(len(ray) > 0):
-        anki_info_path = ray[0]
+    info_files = [x for x in directory.glob('*.info')]
+
+    for anki_info_path in info_files:
         with anki_info_path.open() as anki_info_file:
             parse_info_file(anki_info_file)
-            tag = util.get_tag(anki_info_file.name)
-            try:
-                if tag in get_dates().keys():
-                    due_date = get_dates()[tag]
-                    if datetime.now() > (due_date + timedelta(days=1)):
-                        statements.remove_statements_with_tag(tag)
-            except:
-                raise
 
     for subdir in subdirs:
         parse_dir(subdir)
@@ -66,4 +59,5 @@ def parse_dir(directory):
 statements.set_notes(pd.DataFrame())
 resources_directory = Path.home() / 'Documents' / 'Resources'
 parse_dir(resources_directory)
+statements.remove_statements_past_due(get_dates())
 add_notes_to_anki(statements.notes)

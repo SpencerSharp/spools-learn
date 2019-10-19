@@ -7,19 +7,59 @@ import pandas as pd
 import numpy as np
 import re
 import lib.util as util
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def set_notes(new_notes):
     global notes
     notes = new_notes
 
-def remove_statements_with_tag(tag):
-    temp = notes.replace(tag, value=np.nan)
-    set_notes(temp.dropna(subset=['tag']))
+def op_on_row(tags_to_dates, row):
+    tag = row['tag']
+    if tag in tags_to_dates.keys():
+        date = tags_to_dates[tag]
+        print(tag + " " + str(date))
+        if type(date) == type(datetime.now()):
+            return date + timedelta(minutes=np.random.random())
+        tags_to_dates[tag] = date + 1
+    else:
+        print(tag)
+        tags_to_dates[tag] = 1
+        date = 0
+    return datetime.now() + timedelta(days=20000+date) + timedelta(hours=np.random.random())
+
+def remove_statements_past_due(dates):
+    temp = notes.copy()
+    temp = temp.sample(frac=1.0)
+    tags = []
+    tags_to_dates = {}
+    max_due_date = datetime.now()
+    print(dates.keys())
+    for item in notes['tag']:
+        if item not in tags:
+            tags.append(item)
+    for tag in tags:
+        due_date = None
+        for pos_tag in dates.keys():
+            if tag in pos_tag:
+                if due_date == None or dates[pos_tag] < due_date:
+                    due_date = dates[pos_tag]
+        if due_date == None:
+            print(tag)
+        elif datetime.now() > (due_date + timedelta(days=1)):
+            temp = temp.replace(tag, value=np.nan)
+        else:
+            tags_to_dates[tag] = due_date
+    temp = temp.dropna(subset=['tag'])
+    temp['date'] = temp.apply(lambda row: op_on_row(tags_to_dates, row),axis=1)
+    temp = temp.sort_values(by='date')
+    temp = temp.reset_index(drop=True)
+    print(temp)
+    temp = temp.drop(labels='date',axis=1)
+    set_notes(temp)
 
 def add_statement(file, line):
     global tag
-    tag = util.get_tag(file.name)
+    tag = util.get_tag(file)
 
     if re.match('~.+?~', line):
         description = util.getline(file)

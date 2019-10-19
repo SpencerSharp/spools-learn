@@ -44,31 +44,38 @@ def sub_latex(line):
             latex_start = '[$$]'
             latex_end = '[/$$]'
 
+            
+
             line = before + latex_start + latex + latex_end + after
         else:
             line = re.sub(r'\\\\\[', '\[', line)
             line = re.sub(r'\\\\\]', '\]', line)
     return line
 
-def set_header(filename, header):
+def set_header(file, header):
+    filepath = Path(file.name).as_posix()
     global tags
     try:
         if header == None:
-            tags.pop(filename,None)
+            tags.pop(filepath,None)
         else:
-            tags[filename] = filename + '::' + header
+            tags[filepath] = filepath + '::' + header
     except:
         tags = {}
     if header == None:
-            tags.pop(filename,None)
+        tags.pop(filepath,None)
     else:
-        tags[filename] = filename + '::' + header
+        tags[filepath] = filepath + '::' + header
 
-def get_tag(filename):
+def get_tag(file):
+    filepath = Path(file.name).as_posix()
     try:
-        return tags[filename]
+        return tags[filepath]
     except:
-        resources_directory = Path.home() / 'Documents' / 'Resources'
-        relative_tag = Path(filename).relative_to(resources_directory)
-        tag = '::'.join(relative_tag.parts[:-1])
-        return tag
+        return get_raw_tag(file)
+
+def get_raw_tag(file):
+    resources_directory = Path.home() / 'Documents' / 'Resources'
+    relative_tag = Path(file.name).relative_to(resources_directory)
+    tag = '::'.join(relative_tag.parts[:-1])
+    return tag

@@ -58,58 +58,54 @@ def get_current_anki_cards_as_dataframe():
     return df
 
 def remove_old_cards(old_frame, new_frame):
-    # for ind,row in new_frame.iterrows():
-    #     if re.match('.*Name.*',row['question']):
-    #         print(row['question'])
-    global expected_failures
-    expected_failures = 0
-    if len(old_frame) == 0:
-        return
-    old_frame['question'] = old_frame['question'].apply(lambda x: re.sub('\n\n.*','',x))
+    old_frame['question'] = old_frame['fields'].apply(lambda x: x['Front']['value'])
+
     to_remove = old_frame.merge(right=new_frame,how='outer',on='question',indicator=True)
-    to_remove.replace(to_replace='right_only',value=np.nan,inplace=True)
-    
     expected_failures = to_remove.groupby('_merge').count()['question']['both']
+    to_remove.replace(to_replace='right_only',value=np.nan,inplace=True)
     to_remove.replace(to_replace='both',value=np.nan,inplace=True)
     to_remove.dropna(subset=['_merge'],inplace=True)
 
     if len(to_remove) > 0:
+        print("\nsuspending " + str(len(to_remove)) + " cards")
         params = {
             'cards': to_remove['cardId'].astype(dtype=np.dtype(np.int64)).to_numpy().tolist()
         }
         for ind,thing in to_remove.iterrows():
-            print(thing['question'] + ' ')
-        print('-----------------------')
-        print(params)
-        print('-----------------------')
-        note_ids = send_request('areSuspended',params)
-        print('-----------------------')
-        print(note_ids)
-        print('-----------------------')
+            print(thing)
+        # print('-----------------------')
+        # print(params)
+        # print('-----------------------')
+        # note_ids = send_request('areSuspended',params)
+        # print('-----------------------')
+        # print(note_ids)
+        # print('-----------------------')
+        
         note_ids = send_request('suspend',params)
-        print('-----------------------')
-        print(note_ids)
-        print('-----------------------')
-        note_ids = send_request('areSuspended',params)
-        print('-----------------------')
-        print(note_ids)
-        print('-----------------------')
+        # print('-----------------------')
+        # print(note_ids)
+        # print('-----------------------')
+        # note_ids = send_request('areSuspended',params)
+        # print('-----------------------')
+        # print(note_ids)
+        # print('-----------------------')
 
         # params = {
         #     'notes': note_ids
         # }
 
         # result = send_request('deleteNotes',params)
-
-    to_unsuspend = old_frame.merge(right=new_frame,how='outer',on='question',indicator=True)
-    to_unsuspend.replace(to_replace='left_only',value=np.nan,inplace=True)
-    to_unsuspend.replace(to_replace='right_only',value=np.nan,inplace=True)
-    to_unsuspend.dropna(subset=['_merge'],inplace=True)
+    to_unsuspend = new_frame.merge(right=old_frame,how='left',on='question',indicator=True, validate='one_to_one', suffixes=(True, False))
+    to_unsuspend = to_unsuspend[['question','cardId']]
+    to_unsuspend.dropna(axis=0,inplace=True)
 
     if len(to_unsuspend) > 0:
+        print("\nunsuspending " + str(len(to_unsuspend)) + " cards")
         params = {
-            'cards': to_remove['cardId'].astype(dtype=np.dtype(np.int64)).to_numpy().tolist()
+            'cards': to_unsuspend['cardId'].astype(dtype=np.dtype(np.int64)).to_numpy().tolist()
         }
+        for ind,thing in to_unsuspend.iterrows():
+            print(thing['question'])
         note_ids = send_request('unsuspend',params)
 
     to_add = old_frame.merge(right=new_frame,how='outer',on='question',indicator=True)
@@ -124,6 +120,7 @@ def add_notes_to_anki(notes_frame):
     notes_frame = remove_old_cards(old_frame, notes_frame)
 
     if len(notes_frame) > 0:
+        print("\nadding " + str(len(notes_frame)) + " cards")
         listable_notes = get_params_from_dataframe(notes_frame)
 
         responses = []
