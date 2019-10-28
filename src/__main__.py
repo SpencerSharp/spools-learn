@@ -35,7 +35,7 @@ def parse_info_file(file):
         if re.match('Due.*', line):
             add_due_date(line, util.get_tag(file))
         elif re.match('_.*?_', line):
-            util.set_header(file, line[1:-1])
+            util.set_header(file, line[2:-2])
         elif len(line) == 0:
             util.set_header(file, None)
         else:

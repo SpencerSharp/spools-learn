@@ -28,46 +28,58 @@ def send_request(action, params):
 
     return result
 
+def sub_question(line, tag, raw_tag):
+    line = sub_latex(line)
+    if tag != raw_tag:
+        header = tag.split("::")[-1]
+        header = re.sub("-"," ",header)
+        line = header + ": " + line
+    return line
+
+def sub_answer(line, tag, raw_tag):
+    line = sub_latex(line)
+    return line
+
+def get_raw_question(question):
+    raw_question = re.sub('^(\w[ ]?)+?: ', '', question)
+    # if(raw_question != question):
+    #     print(question)
+    #     print(raw_question)
+    #     print()
+    return raw_question
+
 def sub_latex(line):
     if line == None:
         return None
-    latex = re.search(r"(.*?)\\\[ (.+?) \\\](.*?)", line)
+    latex = re.search(r"(.*?)\\\[(.+?)\\\](.*?)", line)
     if latex != None:
-        line = re.sub('<','',line)
-        line = re.sub('>','',line)
-        latex = re.search(r'(.*?)\\\[ (.+?) \\\](.*?)', line)
-        start = re.search(r'.?\\\[', latex.group(0))
-        start = start.group(0)
-        if len(start) < 3 or start[0] != '\\':
-            before = latex.group(1)
-            after = latex.group(3)
-            latex = latex.group(2)
+        before = latex.group(1)
+        after = latex.group(3)
+        latex = latex.group(2)
+        latex = re.sub("[...]","?",latex)
 
-            latex_start = '[$$]'
-            latex_end = '[/$$]'
+        latex_start = '[$$]'
+        latex_end = '[/$$]'
 
-            
-
-            line = before + latex_start + latex + latex_end + after
-        else:
-            line = re.sub(r'\\\\\[', '\[', line)
-            line = re.sub(r'\\\\\]', '\]', line)
+        line = before + latex_start + latex + latex_end + after
     return line
 
 def set_header(file, header):
-    filepath = Path(file.name).as_posix()
     global tags
     try:
-        if header == None:
-            tags.pop(filepath,None)
-        else:
-            tags[filepath] = filepath + '::' + header
+        temp = tags.keys()
+        _set_header(file, header)
     except:
         tags = {}
+        _set_header(file, header)
+
+def _set_header(file, header):
+    filepath = Path(file.name).as_posix()
     if header == None:
-        tags.pop(filepath,None)
+        if filepath in tags.keys():
+            del tags[filepath]
     else:
-        tags[filepath] = filepath + '::' + header
+        tags[filepath] = re.sub(" ","-",get_raw_tag(file) + '::' + header)
 
 def get_tag(file):
     filepath = Path(file.name).as_posix()

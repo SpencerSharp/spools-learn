@@ -5,7 +5,7 @@ import requests
 import urllib
 import pandas as pd
 import numpy as np
-from .util import send_request
+from .util import send_request, get_raw_question
 
 def collapse_fields(row):
     row['fields'] = {
@@ -25,6 +25,8 @@ def get_params_from_dataframe(notes_frame):
     notes_frame['tags'] = None
     if 'answer_y' in notes_frame.columns:
         notes_frame['answer'] = notes_frame['answer_y']
+    if 'question_y' in notes_frame.columns:
+        notes_frame['question'] = notes_frame['question_y']
     result = []
     for ind, row in notes_frame.iterrows():
         row = collapse_fields(row)
@@ -58,61 +60,120 @@ def get_current_anki_cards_as_dataframe():
     return df
 
 def remove_old_cards(old_frame, new_frame):
+    if old_frame.empty:
+        return new_frame
+
+    new_frame['raw_question'] = new_frame['question'].apply(lambda x: get_raw_question(x))
     old_frame['question'] = old_frame['fields'].apply(lambda x: x['Front']['value'])
-
-    to_remove = old_frame.merge(right=new_frame,how='outer',on='question',indicator=True)
-    expected_failures = to_remove.groupby('_merge').count()['question']['both']
-    to_remove.replace(to_replace='right_only',value=np.nan,inplace=True)
-    to_remove.replace(to_replace='both',value=np.nan,inplace=True)
-    to_remove.dropna(subset=['_merge'],inplace=True)
-
+    old_frame['raw_question'] = old_frame['fields'].apply(lambda x: get_raw_question(x['Front']['value']))
+    old_frame['answer'] = old_frame['fields'].apply(lambda x: x['Back']['value'])
+    should_quit = False
+    print('new_frame')
+    try:
+        print(pd.concat(g for _, g in new_frame.groupby(["raw_question","answer"]) if len(g) > 1))
+        should_quit = True
+    except:
+        pass
+    print('old_frame')
+    try:
+        print(pd.concat(g for _, g in old_frame.groupby(["raw_question","answer"]) if len(g) > 1))
+        should_quit = True
+    except:
+        pass
+    
+    if should_quit:
+        print("Nonunique keys, see table above")
+        sys.exit()
+    print('merged')
+    
+    to_remove = old_frame.merge(right=new_frame,how='outer',on=['raw_question','answer'],indicator=True,validate='one_to_one')
+    to_remove = to_remove.loc[to_remove['_merge'] == 'left_only']
+    to_repair = old_frame.merge(right=new_frame,how='inner',on=['raw_question','answer'],validate='one_to_one')
+    to_create = old_frame.merge(right=new_frame,how='outer',on=['raw_question','answer'],indicator=True,validate='one_to_one')
+    to_create = to_create.loc[to_create['_merge'] == 'right_only']
+    # to_remove.replace(to_replace='right_only',value=np.nan,inplace=True)
+    # to_remove.replace(to_replace='both',value=np.nan,inplace=True)
+    # to_remove.dropna(subset=['_merge'],inplace=True)
     if len(to_remove) > 0:
         print("\nsuspending " + str(len(to_remove)) + " cards")
         params = {
             'cards': to_remove['cardId'].astype(dtype=np.dtype(np.int64)).to_numpy().tolist()
         }
-        for ind,thing in to_remove.iterrows():
-            print(thing['fields'])
-        # print('-----------------------')
-        # print(params)
-        # print('-----------------------')
-        # note_ids = send_request('areSuspended',params)
-        # print('-----------------------')
-        # print(note_ids)
-        # print('-----------------------')
-        
         note_ids = send_request('suspend',params)
-        # print('-----------------------')
-        # print(note_ids)
-        # print('-----------------------')
-        # note_ids = send_request('areSuspended',params)
-        # print('-----------------------')
-        # print(note_ids)
-        # print('-----------------------')
-
-        # params = {
-        #     'notes': note_ids
-        # }
-
         # result = send_request('deleteNotes',params)
-    to_unsuspend = new_frame.merge(right=old_frame,how='left',on='question',indicator=True, validate='one_to_one', suffixes=(True, False))
-    to_unsuspend = to_unsuspend[['question','cardId']]
-    to_unsuspend.dropna(axis=0,inplace=True)
+        # params = {
+        #     'notes': to_remove['note'].astype(dtype=np.dtype(np.int64)).to_numpy().tolist()
+        # }
+        # notes = send_request('notesInfo',params)
+        # ind = -1
+        # cards_to_suspend = []
+        # for card in to_remove.iterrows():
+        #     card_front = card['question']
+        #     card_front = re.sub(heading_regex,'',card_front)
+        #     for local_card in new_frame.iterrows():
+        #         note_front = note['question']
+        #         note_front = re.sub(heading_regex,'',card_front)
+        #         if card_front == note_front:
+        #             if card_back == note_back:
+        #                 send_request('removeTags')
+        #     ind += 1
+        #     pos_question = to_remove.iloc[ind]['question']
 
-    if len(to_unsuspend) > 0:
-        print("\nunsuspending " + str(len(to_unsuspend)) + " cards")
+    
+    # to_unsuspend = new_frame.merge(right=old_frame,how='left',on='question',indicator=True, validate='one_to_one', suffixes=(True, False))
+
+    # to_unsuspend = to_unsuspend[['question','cardId','note','tag']]
+    # to_unsuspend.dropna(axis=0,inplace=True)
+
+    if len(to_repair) > 0:
+        print("\nrepairing " + str(len(to_repair)) + " cards")
         params = {
-            'cards': to_unsuspend['cardId'].astype(dtype=np.dtype(np.int64)).to_numpy().tolist()
+            'cards': to_repair['cardId'].astype(dtype=np.dtype(np.int64)).to_numpy().tolist()
         }
-        for ind,thing in to_unsuspend.iterrows():
-            print(thing['question'])
-        note_ids = send_request('unsuspend',params)
+        # for ind,thing in to_unsuspend.iterrows():
+        #     print(thing['question'])
+        send_request('unsuspend',params)
+        params = {
+            'notes': to_repair['note'].astype(dtype=np.dtype(np.int64)).to_numpy().tolist()
+        }
+        notes = send_request('notesInfo',params)
+        ind = -1
+        for note in notes:
+            ind += 1
+            local_tag = to_repair.iloc[ind]['tag']
+            if local_tag in note['tags']:
+                if(len(note['tags']) > 1):
+                    tags_to_remove = note['tags']
+                    tags_to_remove.remove(local_tag)
+                    params = {
+                        'notes': [note['noteId']],
+                        'tags': " ".join(note['tags'])
+                    }
+                    send_request('removeTags',params)
+            else:
+                # print(note['noteId'])
+                # print(note['tags'])
+                # print(len(note['tags']))
+                # print(local_tag)
+                
+                if(len(note['tags']) > 0):
+                    tags_to_remove = note['tags']
+                    params = {
+                        'notes': [note['noteId']],
+                        'tags': " ".join(note['tags'])
+                    }
+                    send_request('removeTags',params)
+                params = {
+                    'notes': [note['noteId']],
+                    'tags': local_tag
+                }
+                send_request('addTags',params)
 
-    to_add = old_frame.merge(right=new_frame,how='outer',on='question',indicator=True)
-    to_add.replace(to_replace='left_only',value=np.nan,inplace=True)
-    to_add.replace(to_replace='both',value=np.nan,inplace=True)
-    to_add.dropna(subset=['_merge'],inplace=True)
-    return to_add
+    # to_add = old_frame.merge(right=new_frame,how='outer',on='question',indicator=True)
+    # to_add.replace(to_replace='left_only',value=np.nan,inplace=True)
+    # to_add.replace(to_replace='both',value=np.nan,inplace=True)
+    # to_add.dropna(subset=['_merge'],inplace=True)
+    return to_create
 
 def add_notes_to_anki(notes_frame):
     old_frame = get_current_anki_cards_as_dataframe()
@@ -128,8 +189,10 @@ def add_notes_to_anki(notes_frame):
             params = {
                 'note': note
             }
-            print(note)
-            print()
             response = send_request('addNote',params)
+            if(response == None):
+                print("Below note failed to add")
+                print(note)
+                print()
             responses.append(response)
         print(responses)

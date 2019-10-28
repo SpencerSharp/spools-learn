@@ -12,39 +12,37 @@ from datetime import datetime, timedelta
 def set_notes(new_notes):
     global notes
     notes = new_notes
-# <img><img src="rotated-stem3.png">
+
 def op_on_row(tags_to_dates, row):
     tag = row['tag']
     if tag in tags_to_dates.keys():
         date = tags_to_dates[tag]
-        print(tag + " " + str(date))
         if type(date) == type(datetime.now()):
             return date + timedelta(minutes=np.random.random())
         tags_to_dates[tag] = date + 1
     else:
-        print(tag)
         tags_to_dates[tag] = 1
         date = 0
     return datetime.now() + timedelta(days=20000+date) + timedelta(hours=np.random.random())
 
 def remove_statements_past_due(dates):
+    print(dates)
     temp = notes.copy()
     temp = temp.sample(frac=1.0)
     tags = []
     tags_to_dates = {}
     max_due_date = datetime.now()
-    print(dates.keys())
     for item in notes['tag']:
         if item not in tags:
             tags.append(item)
     for tag in tags:
         due_date = None
         for pos_tag in dates.keys():
-            if tag in pos_tag:
+            if pos_tag in tag:
                 if due_date == None or dates[pos_tag] < due_date:
                     due_date = dates[pos_tag]
         if due_date == None:
-            print(tag)
+            pass
         elif datetime.now() > (due_date + timedelta(days=1)):
             temp = temp.replace(tag, value=np.nan)
         else:
@@ -53,18 +51,19 @@ def remove_statements_past_due(dates):
     temp['date'] = temp.apply(lambda row: op_on_row(tags_to_dates, row),axis=1)
     temp = temp.sort_values(by='date')
     temp = temp.reset_index(drop=True)
-    print(temp)
     temp = temp.drop(labels='date',axis=1)
     set_notes(temp)
 
 def add_statement(file, line):
     global tag
     tag = util.get_tag(file)
+    global raw_tag
+    raw_tag = util.get_raw_tag(file)
 
     if re.match('~.+?~', line):
         description = util.getline(file)
         latex = util.getline(file)
-        add_equation_statement(line, description, latex)
+        add_equation_statement(line[1:-1], description, latex)
     elif len(re.findall('<(.+?)>',line)) != 0:
         clozes = re.findall('<(.+?)>',line)
         add_cloze_statement(line, clozes)
@@ -81,8 +80,8 @@ def add_simple_statement(question, answer):
     except NameError:
         new_id = 0
 
-    question = util.sub_latex(question)
-    answer = util.sub_latex(answer)
+    question = util.sub_question(question, tag, raw_tag)
+    answer = util.sub_answer(answer, tag, raw_tag)
 
     fields = ['question','answer','tag']
     columns = [question, answer, tag]
@@ -93,6 +92,9 @@ def add_simple_statement(question, answer):
 
 def add_equation_statement(name, description, latex):
     clozes = re.finditer('<(.+?)>',latex)
+    print(latex)
+    print(clozes)
+    print()
     add_cloze_statement(latex, clozes)
 
     add_simple_statement(description, name)
@@ -107,6 +109,8 @@ def add_cloze_statement(question, clozes):
             cloze = question[cloze.start()+1:cloze.end()-1]
         else:
             prompt = re.sub(re.escape('<'+cloze+'>'), '[...]', question, count=1)
+        prompt = re.sub(re.escape('<'), '', prompt)
+        prompt = re.sub(re.escape('>'), '', prompt)
         add_simple_statement(prompt, cloze)
 
 def add_definition_statement(definition):
@@ -118,22 +122,21 @@ def add_definition_statement(definition):
     answer = answer.group(0)
     answer = answer[2:]
 
-    hint = 'Definition: '
-    filename = answer + '.mp3'
+    hint = 'Define '
+    filename = question + '.mp3'
     audio_str = '[sound:{}]'.format(filename)
 
     params = {
         'filename': filename
     }
 
-    # is_already_saved = send_request('retrieveMediaFile', params)
-    is_already_saved = True
+    is_already_saved = util.send_request('retrieveMediaFile', params)
     if not is_already_saved:
         from google.cloud import texttospeech
 
         client = texttospeech.TextToSpeechClient()
 
-        synthesis_input = texttospeech.types.SynthesisInput(text=answer)
+        synthesis_input = texttospeech.types.SynthesisInput(text=question)
 
         voice = texttospeech.types.VoiceSelectionParams(
             language_code=os.getenv('TTS_LANG'),
@@ -150,7 +153,7 @@ def add_definition_statement(definition):
             'data': base64.standard_b64encode(response.audio_content).decode()
         }
 
-        send_request('storeMediaFile', params)
+        util.send_request('storeMediaFile', params)
 
     add_simple_statement(hint + question, answer + audio_str)
-    add_simple_statement(answer+audio_str, question)
+    add_simple_statement(answer, question + audio_str)
