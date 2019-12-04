@@ -1,5 +1,5 @@
 import subprocess
-import os
+import os, sys
 from pathlib import Path
 import pandas as pd
 import re
@@ -18,6 +18,12 @@ def get_dates():
     except:
         return {}
 
+def get_max_new():
+    try:
+        return max_new
+    except:
+        return {}
+
 def add_due_date(line, tag):
     line = line[4:]
     while line[0] == ' ':
@@ -29,21 +35,35 @@ def add_due_date(line, tag):
         dates = {}
     dates[tag] = datetime.strptime(line, '%Y-%m-%d')
 
+def add_max_new(line, tag):
+    line = line[1:-1]
+    global max_new
+    try:
+        max_new[tag] = int(line)
+    except:
+        max_new = {}
+    max_new[tag] = int(line)
+
 def parse_info_file(file):
     line = util.getline(file)
     while line != None:
-        if re.match('Due.*', line):
+        if len(line) == 0:
+            util.set_header(file, None)
+        elif re.match('Due.*', line):
             add_due_date(line, util.get_tag(file))
         elif re.match('_.*?_', line):
             util.set_header(file, line[2:-2])
-        elif len(line) == 0:
-            util.set_header(file, None)
+        elif re.match('!.*?!', line):
+            statements.add_for_each_statement(file, line[1:-1])
+        elif re.match('\*.*\*', line):
+            add_max_new(line, util.get_raw_tag(file))
         else:
             statements.add_statement(file, line)
         line = util.getline(file)
     util.set_header(file, None)
 
 def parse_dir(directory):
+    lib = directory / '.lib'
     subdirs = [x for x in directory.iterdir() if x.is_dir()]
 
     info_files = [x for x in directory.glob('*.info')]
@@ -55,9 +75,8 @@ def parse_dir(directory):
     for subdir in subdirs:
         parse_dir(subdir)
 
-#if ipc.create_process():
 statements.set_notes(pd.DataFrame())
 resources_directory = Path.home() / 'Documents' / 'Resources'
 parse_dir(resources_directory)
 statements.remove_statements_past_due(get_dates())
-add_notes_to_anki(statements.notes)
+add_notes_to_anki(statements.notes, get_max_new())

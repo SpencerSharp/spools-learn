@@ -6,6 +6,8 @@ import urllib
 def getline(file):
     try:
         line = file.readline()
+        if len(line) == 1:
+            return ''
         while re.match('\\s',line[0]):
             line = line[1:]
         while re.match('\\s',line[-1]):
@@ -42,10 +44,6 @@ def sub_answer(line, tag, raw_tag):
 
 def get_raw_question(question):
     raw_question = re.sub('^(\w[ ]?)+?: ', '', question)
-    # if(raw_question != question):
-    #     print(question)
-    #     print(raw_question)
-    #     print()
     return raw_question
 
 def sub_latex(line):
@@ -66,15 +64,11 @@ def sub_latex(line):
 
 def set_header(file, header):
     global tags
+    filepath = Path(file.name).as_posix()
     try:
         temp = tags.keys()
-        _set_header(file, header)
     except:
         tags = {}
-        _set_header(file, header)
-
-def _set_header(file, header):
-    filepath = Path(file.name).as_posix()
     if header == None:
         if filepath in tags.keys():
             del tags[filepath]
@@ -92,4 +86,6 @@ def get_raw_tag(file):
     resources_directory = Path.home() / 'Documents' / 'Resources'
     relative_tag = Path(file.name).relative_to(resources_directory)
     tag = '::'.join(relative_tag.parts[:-1])
+    tag = re.sub(' ','-',tag)
     return tag
+

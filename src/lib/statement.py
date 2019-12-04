@@ -1,3 +1,4 @@
+from google.cloud import texttospeech
 import os
 import base64
 from pathlib import Path
@@ -26,7 +27,6 @@ def op_on_row(tags_to_dates, row):
     return datetime.now() + timedelta(days=20000+date) + timedelta(hours=np.random.random())
 
 def remove_statements_past_due(dates):
-    print(dates)
     temp = notes.copy()
     temp = temp.sample(frac=1.0)
     tags = []
@@ -52,6 +52,39 @@ def remove_statements_past_due(dates):
     temp = temp.sort_values(by='date')
     temp = temp.reset_index(drop=True)
     temp = temp.drop(labels='date',axis=1)
+    set_notes(temp)
+
+def add_for_each_statement(file, statement):
+    orig_ind = file.tell()
+    line = util.getline(file)
+    while line != None and len(line) > 0:
+        question = line[0:line.find('|')-1]
+        line_statement = re.sub(re.escape('<[...]>'),question,statement)
+        clozes = re.findall('<(.+?)>',line_statement)
+        add_cloze_statement(line_statement, clozes)
+        line = util.getline(file)
+    file.seek(orig_ind)
+
+def limit_new(max_new):
+    temp = pd.DataFrame()
+    ind = 0
+    counted_new = {}
+    while ind < len(notes):
+        row = notes.iloc[ind].copy()
+        is_ever_found = False
+        for pos_tag in max_new.keys():
+            if pos_tag in row['tag']:
+                is_ever_found = True
+                if pos_tag in counted_new.keys():
+                    if counted_new[pos_tag] < max_new[pos_tag]:
+                        temp = temp.append(row)
+                        counted_new[pos_tag] += 1
+                elif max_new[pos_tag] > 0:
+                    temp = temp.append(row)
+                    counted_new[pos_tag] = 1
+        if not is_ever_found:
+            temp = temp.append(row)
+        ind += 1
     set_notes(temp)
 
 def add_statement(file, line):
@@ -92,9 +125,6 @@ def add_simple_statement(question, answer):
 
 def add_equation_statement(name, description, latex):
     clozes = re.finditer('<(.+?)>',latex)
-    print(latex)
-    print(clozes)
-    print()
     add_cloze_statement(latex, clozes)
 
     add_simple_statement(description, name)
@@ -132,8 +162,6 @@ def add_definition_statement(definition):
 
     is_already_saved = util.send_request('retrieveMediaFile', params)
     if not is_already_saved:
-        from google.cloud import texttospeech
-
         client = texttospeech.TextToSpeechClient()
 
         synthesis_input = texttospeech.types.SynthesisInput(text=question)
