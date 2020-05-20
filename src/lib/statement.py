@@ -183,5 +183,7 @@ def add_definition_statement(definition):
 
         util.send_request('storeMediaFile', params)
 
+    # check if we've already learned the basic definition
+    # if we have, then add the harder (reverse) one
     add_simple_statement(hint + question, answer + audio_str)
     add_simple_statement(answer, question + audio_str)
