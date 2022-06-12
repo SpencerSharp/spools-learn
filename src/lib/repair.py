@@ -16,7 +16,7 @@ def remove_tags(note):
         }
         send_request('removeTags',params)
 
-def add_tags(note):
+def add_tags(note, local_tag):
     if(len(note['tags']) > 0):
         tags_to_remove = note['tags']
         params = {
@@ -42,7 +42,7 @@ def fix_tags():
         if local_tag in note['tags']:
             remove_tags(note)
         else:
-            add_tags(note)
+            add_tags(note, local_tag)
 '''
 What is the point of this?
     I think to be able to generate datapoints? idk
