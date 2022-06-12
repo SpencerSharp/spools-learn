@@ -51,10 +51,7 @@ Why in the range of 1500 to 3000?
 Shouldnt this factor into leeches more?
 Or into lapses?
 
-setEaseFactors is a custom function in ankiconnect that i wrote
-I tried to merge it into master, no status update on that yet
-
-
+setEaseFactors is a custom function in ankiconnect that i wrote. got merged into master (yay!)
 '''
 def fix_ease(max_new):
     ind = 0
