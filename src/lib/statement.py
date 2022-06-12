@@ -10,6 +10,27 @@ import re
 import lib.util as util
 from datetime import datetime, timedelta
 
+def set_old_frame(f):
+    global old_frame
+    old_frame = f
+
+def get_old_frame():
+    return old_frame
+
+def search_for_q(text):
+    def searcher(row):
+        return re.match(text.rstrip() + '\n.*', row['question'])
+    return searcher
+
+def is_note_learned(text):
+    do_search_for_text = search_for_q(text)
+    sub = old_frame[old_frame['question'].str.match(text)]
+    if len(sub) > 0:
+        if 'queue' in sub.columns:
+            if sub['queue'].values[0] == 2:
+                return True
+    return False
+
 def set_notes(new_notes):
     global notes
     notes = new_notes
@@ -66,6 +87,7 @@ def add_for_each_statement(file, statement):
     file.seek(orig_ind)
 
 def limit_new(max_new):
+    print(max_new)
     temp = pd.DataFrame()
     ind = 0
     counted_new = {}
@@ -164,17 +186,17 @@ def add_definition_statement(definition):
     if not is_already_saved:
         client = texttospeech.TextToSpeechClient()
 
-        synthesis_input = texttospeech.types.SynthesisInput(text=question)
+        synthesis_input = texttospeech.SynthesisInput(text=question)
 
-        voice = texttospeech.types.VoiceSelectionParams(
+        voice = texttospeech.VoiceSelectionParams(
             language_code=os.getenv('TTS_LANG'),
-            ssml_gender=texttospeech.enums.SsmlVoiceGender.MALE,
+            ssml_gender=texttospeech.SsmlVoiceGender.MALE,
             name=os.getenv('TTS_VOICE'))
 
-        audio_config = texttospeech.types.AudioConfig(
-            audio_encoding=texttospeech.enums.AudioEncoding.MP3)
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3)
 
-        response = client.synthesize_speech(synthesis_input, voice, audio_config)
+        response = client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
 
         params = {
             'filename': filename,
@@ -186,4 +208,5 @@ def add_definition_statement(definition):
     # check if we've already learned the basic definition
     # if we have, then add the harder (reverse) one
     add_simple_statement(hint + question, answer + audio_str)
-    add_simple_statement(answer, question + audio_str)
+    if is_note_learned(hint + question):
+        add_simple_statement(answer, question + audio_str)

@@ -60,7 +60,11 @@ def get_current_anki_cards_as_dataframe():
     res = json.dumps(response)
     df = pd.read_json(res,orient='records')
 
-    return df
+    df['question'] = df['fields'].apply(lambda x: x['Front']['value'])
+    df['raw_question'] = df['fields'].apply(lambda x: get_raw_question(x['Front']['value']))
+    df['answer'] = df['fields'].apply(lambda x: x['Back']['value'])
+
+    statements.set_old_frame(df)
 
 # this code is such a mess, please fix
 def remove_old_cards(old_frame, new_frame, max_new):
@@ -95,6 +99,7 @@ def remove_old_cards(old_frame, new_frame, max_new):
 
     if len(to_remove) > 0:
         print("\nsuspending " + str(len(to_remove)) + " cards")
+        # print(to_remove.tail(10))
         params = {
             'cards': to_remove['cardId'].astype(dtype=np.dtype(np.int64)).to_numpy().tolist()
         }
@@ -106,13 +111,18 @@ def remove_old_cards(old_frame, new_frame, max_new):
     return to_create
 
 def add_notes_to_anki(notes_frame, max_new):
-    old_frame = get_current_anki_cards_as_dataframe()
+    old_frame = statements.get_old_frame()
 
     notes_frame = remove_old_cards(old_frame, notes_frame, max_new)
 
-    print(max_new)
+    # print(max_new)
+
+    print(notes_frame)
+    print('koooooooooooooooooooooooooooooooofers')
 
     statements.set_notes(notes_frame.copy())
+
+    # print(notes_frame)
     
     statements.limit_new(max_new)
 

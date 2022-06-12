@@ -7,7 +7,7 @@ import urllib
 import json
 from datetime import datetime, timedelta
 
-from lib.anki import add_notes_to_anki
+from lib.anki import add_notes_to_anki, get_current_anki_cards_as_dataframe
 import lib.statement as statements
 import lib.ipc as ipc
 import lib.util as util
@@ -77,6 +77,7 @@ def parse_dir(directory):
 
 statements.set_notes(pd.DataFrame())
 resources_directory = Path.home() / 'Documents' / 'Resources'
+get_current_anki_cards_as_dataframe()
 parse_dir(resources_directory)
 statements.remove_statements_past_due(get_dates())
 add_notes_to_anki(statements.notes, get_max_new())
